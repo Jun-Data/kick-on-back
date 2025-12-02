@@ -70,7 +70,7 @@ public class TeamService {
         return Team.builder()
                 .id(dto.getTeam().getId())
                 .name(dto.getTeam().getName())
-                .code(dto.getTeam().getLogo())
+                .code(dto.getTeam().getCode())
                 .logoUrl(dto.getTeam().getLogo())       // logo → logoUrl
                 .founded(dto.getTeam().getFounded())
                 .venueName(dto.getVenue().getName())
