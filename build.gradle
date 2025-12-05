@@ -36,6 +36,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     // MySQL 연결 도구
     runtimeOnly 'com.mysql:mysql-connector-j'
+    // 문자열 유사도 비교 (Jaro-Winkler)
+    implementation 'org.apache.commons:commons-text:1.10.0'
 }
 
 tasks.named('test') {
