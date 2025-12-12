@@ -34,9 +34,12 @@ public class TeamNameMatcher {
                 }
             }
             leagueTeamNamesCache.put(leagueCode, names);
-            System.out.println(" [" + leagueCode + "] 매칭용 정답지 확보 완료 (" + names.size() + "팀)");
+
+            System.out.println("\n[" + leagueCode + "] TSDB 정답지:");
+            names.stream().sorted().forEach(name -> System.out.println("  " + name));
+
         } catch (Exception e) {
-            System.out.println(" 정답지 로딩 실패 (" + leagueCode + "): " + e.getMessage());
+            System.out.println("[" + leagueCode + "] 정답지 로딩 실패: " + e.getMessage());
         }
     }
 
@@ -48,23 +51,63 @@ public class TeamNameMatcher {
     String bestMatch = null;
     double maxScore = 0.0;
 
-    // FDO 이름 정제 (비교 정확도를 위해 불필요 단어 제거)
-    String cleanFdoName = fdoName
-            .replace(" FC", "").replace(" AFC", "").replace(" CF", "")
-            .replace("1. ", "").replace("RC ", "").replace("UD ", "")
-            .replace("TSG 1899 ", "").replace(" de ", " ")
-            .trim();
+    // FDO 이름 정규화
+    String cleanFdoName = normalizeName(fdoName);
 
     for (String tsdbName : candidates) {
-        double score = similarity.apply(cleanFdoName, tsdbName);
+        // TSDB 이름도 정규화해서 비교
+        String cleanTsdbName = normalizeName(tsdbName);
+        double score = similarity.apply(cleanFdoName, cleanTsdbName);
         if (score > maxScore) {
             maxScore = score;
-            bestMatch = tsdbName;
+            bestMatch = tsdbName;  // 원본 이름 반환
         }
     }
-    // 유사도가 0.8 (80%) 이상일 때만 인정 (너무 다르면 null)
-    return (maxScore > 0.7) ? bestMatch : null;
+
+    // 0.8 이상만 매칭 인정
+    if (maxScore >= 0.8) {
+        System.out.println("  ✓ " + fdoName + " → " + bestMatch + " (" + String.format("%.2f", maxScore) + ")");
+        return bestMatch;
+    } else {
+        System.out.println("  ✗ " + fdoName + " (최고: " + bestMatch + " " + String.format("%.2f", maxScore) + ")");
+        return null;
     }
+    }
+
+    // 3. 매칭용 이름 정규화 (접두사/접미사/특수문자 제거)
+    private String normalizeName(String name) {
+        if (name == null) return "";
+
+        return name
+            // 접두사 제거 (정규표현식: 문자열 시작 부분)
+            .replaceAll("^(AC |FC |AS |SC |1\\. FC |1\\. |RC |UD |TSG 1899 |Borussia |Club |Deportivo )", "")
+            // 접미사 제거
+            .replace(" FC", "").replace(" AFC", "").replace(" CF", "")
+            .replace(" AC", "").replace(" SC", "")
+            // 중간 단어 제거
+            .replace(" de ", " ").replace(" di ", " ")
+            // 특수문자 정규화 (악센트, 움라우트)
+            .replace("é", "e").replace("á", "a").replace("í", "i")
+            .replace("ó", "o").replace("ú", "u").replace("ñ", "n")
+            .replace("ö", "o").replace("ü", "u").replace("ä", "a")
+            .replace("ß", "ss").replace("ć", "c").replace("ø", "o")
+            // 여러 공백을 하나로
+            .replaceAll("\\s+", " ")
+            .trim();
+    }
+
+    // 4. TSDB 검색 API용 이름 정규화 (악센트 제거)
+    public String normalizeForSearch(String name) {
+        if (name == null) return "";
+
+        return name
+            .replace("é", "e").replace("á", "a").replace("í", "i")
+            .replace("ó", "o").replace("ú", "u").replace("ñ", "n")
+            .replace("ö", "o").replace("ü", "u").replace("ä", "a")
+            .replace("ß", "ss").replace("ć", "c").replace("ø", "o")
+            .trim();
+    }
+
     // 📅 현재 날짜 기준으로 시즌 문자열 계산 (예: 2025-2026)
     private String getCurrentSeasonStr() {
         LocalDate now = LocalDate.now();

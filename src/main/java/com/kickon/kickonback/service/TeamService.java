@@ -50,22 +50,18 @@ public class TeamService {
         );
         for (String code : leagueIdMap.keySet()) {
             {
-                System.out.println(code + "프로세스 시작");
+                System.out.println("\n[" + code + "] 프로세스 시작");
                 try {
-                    // 1. 기본 정보 수집 (football-data.org)
                     fetchAndSaveLeagueData(code);
-                    // 2. TheSportsDB 이름 로딩
                     teamNameMatcher.loadTsdbTeamNames(code, leagueIdMap.get(code));
-                    // 3. TheSportsDB 상세 정보 보강
                     enrichTeamDetails(code);
 
-                    System.out.println("다음 리그를 위해 5초 대기");
                     Thread.sleep(5000);
                 } catch (Exception e) {
-                    System.out.println("Football-data.org" + e.getMessage());
+                    System.out.println("[" + code + "] 오류: " + e.getMessage());
                 }
             }
-            System.out.println("모든 데이터 수집 완료");
+            System.out.println("\n모든 데이터 수집 완료");
 
         }
     }
@@ -165,17 +161,27 @@ public class TeamService {
                 // Football-data.org 이름 -> TheSportsDB 이름에서 찾기
                 String tsdbName = teamNameMatcher.findBestMatch(leagueCode, team.getName());
 
-                // null 체크
-                if (tsdbName == null) {
-                    System.out.println("매칭 실패: " +
-                            team.getName());
-                    continue;  // 다음 팀으로
+                // Fallback: 전체 이름 실패 시 shortName으로 재시도
+                if (tsdbName == null && team.getShortName() != null) {
+                    System.out.println("    → shortName 재시도: " + team.getShortName());
+                    tsdbName = teamNameMatcher.findBestMatch(leagueCode, team.getShortName());
                 }
 
-                // TheSportsDB API 호출
-                String encodedName = URLEncoder.encode(tsdbName, StandardCharsets.UTF_8);
+                if (tsdbName == null) {
+                    continue;
+                }
+
+                // TheSportsDB API 호출 (악센트 제거 후 검색)
+                String normalizedName = teamNameMatcher.normalizeForSearch(tsdbName);
+                String encodedName = URLEncoder.encode(normalizedName, StandardCharsets.UTF_8);
                 String url = String.format(TSDB_URL, encodedName);
                 TSDBTeamDto response = restTemplate.getForObject(url, TSDBTeamDto.class);
+
+                // 검색 결과 확인
+                if (response == null || response.getTeams() == null || response.getTeams().isEmpty()) {
+                    System.out.println("    ⚠ TSDB 검색 결과 없음: " + tsdbName + " → " + normalizedName);
+                    continue;
+                }
 
                 // 데이터 업데이트
                 if (response != null && response.getTeams() != null && !response.getTeams().isEmpty()) {
@@ -189,14 +195,12 @@ public class TeamService {
                     team.setInstagramUrl(detailData.getStrInstagram());
                     team.setDescription(detailData.getStrDescriptionEN());
 
-                    teamRepository.save(team); // DB에 저장
-
-                    System.out.println("TheSportsDB 데이터 업데이트 성공");
+                    teamRepository.save(team);
                 }
                 Thread.sleep(1500);
 
             } catch (Exception e) {
-                System.out.println("TheSportsDB 처리 중 에러" + team.getName() + e.getMessage());
+                System.out.println("  ⚠ TSDB 오류 [" + team.getName() + "]: " + e.getMessage());
             }
         }
     }
